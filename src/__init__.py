@@ -26,6 +26,7 @@ from .document_processor import DocumentProcessor, DocumentChunk
 from .database import DatabaseManager, Document, DocumentChunk as DBDocumentChunk
 from .semantic_search import SemanticSearchEngine
 from .rag_engine import RAGEngine
+from .data_loader import DataFolderLoader
 
 __all__ = [
     "DocumentProcessor",
@@ -34,5 +35,6 @@ __all__ = [
     "Document",
     "DBDocumentChunk",
     "SemanticSearchEngine",
-    "RAGEngine"
+    "RAGEngine",
+    "DataFolderLoader"
 ]

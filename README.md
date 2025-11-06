@@ -4,7 +4,7 @@ A powerful semantic search engine built with LangChain, FastAPI, and PostgreSQL 
 
 ## ✨ Features
 
-- **📄 PDF Document Processing**: Upload and process PDF documents with intelligent text extraction and chunking
+- **📁 Automatic PDF Processing**: Simply drop PDF files in the `data/` folder for automatic processing
 - **🔍 Semantic Search**: Find relevant content using natural language queries instead of keyword matching
 - **🤖 RAG Question Answering**: Get comprehensive answers to questions based on your document content
 - **🆓 Completely Free**: Uses only free and open-source technologies
@@ -12,6 +12,7 @@ A powerful semantic search engine built with LangChain, FastAPI, and PostgreSQL 
 - **📊 RESTful API**: Clean FastAPI interface with automatic documentation
 - **💾 Persistent Storage**: All data stored in PostgreSQL with vector indexing
 - **📈 Analytics**: Built-in performance monitoring and search statistics
+- **🔄 Smart Processing**: Only processes new or modified files, skips duplicates
 
 ## 🛠️ Technology Stack
 
@@ -59,7 +60,9 @@ langchain-sementic-search/
 │   ├── document_processor.py # 📄 PDF processing & text chunking
 │   ├── database.py           # 🗄️  PostgreSQL & vector operations
 │   ├── semantic_search.py    # 🔍 Embeddings & similarity search
-│   └── rag_engine.py         # 🤖 Question answering engine
+│   ├── rag_engine.py         # 🤖 Question answering engine
+│   └── data_loader.py        # 📁 Automatic PDF folder processing
+├── data/                     # 📂 Place your PDF files here for auto-processing
 └── examples/                 # 💡 Usage examples & testing tools
     ├── test_api.py           # 🧪 Complete API testing suite
     └── example_usage.py      # 📖 Direct module usage examples
@@ -75,10 +78,11 @@ langchain-sementic-search/
 - Provides automatic API documentation at `/docs`
 
 **Key endpoints:**
-- `POST /upload-pdf` → Upload and process PDF documents
+- `POST /process-data-folder` → Process PDFs from data/ directory
+- `GET /data-folder-info` → Get info about processed files
 - `POST /search` → Perform semantic search
 - `POST /rag` → Ask questions using RAG
-- `GET /documents` → List all uploaded documents
+- `GET /documents` → List all processed documents
 - `DELETE /documents/{id}` → Remove documents
 
 #### **2. `src/document_processor.py` - PDF Processing Engine**
@@ -155,20 +159,43 @@ langchain-sementic-search/
 - Confidence scoring → Estimates answer reliability
 - Fallback handling → Works even if model loading fails
 
+#### **6. `src/data_loader.py` - Automatic PDF Folder Processing**
+**What it does:**
+- Scans the data/ directory for PDF files
+- Tracks processed files to avoid duplicates
+- Processes new or modified files automatically
+- Provides batch processing for efficiency
+
+**Key features:**
+- `process_all_files()` → Process all PDFs in data/ folder
+- `scan_data_directory()` → Find all PDF files recursively
+- File change detection → Only process modified files
+- Processing cache → Remembers what's been processed
+- Batch operations → Efficient processing of multiple files
+
+**How it works:**
+1. Scans data/ directory for PDF files (including subdirectories)
+2. Calculates file hashes to detect changes
+3. Processes only new or modified files
+4. Stores processing metadata in cache file
+5. Automatically runs on application startup
+
 ### 🔄 **Data Flow - How Everything Works Together**
 
-#### **Document Upload Flow:**
+#### **Document Processing Flow:**
 ```
-PDF File → document_processor → Text Chunks → semantic_search → 
-Vector Embeddings → database → PostgreSQL Storage
+PDF Files in data/ → data_loader → document_processor → Text Chunks → 
+semantic_search → Vector Embeddings → database → PostgreSQL Storage
 ```
 
-1. **PDF Upload**: User uploads PDF via `/upload-pdf` endpoint
-2. **Text Extraction**: PyMuPDF extracts raw text from PDF
-3. **Text Cleaning**: Remove unwanted characters, normalize spacing
-4. **Chunking**: Split text into overlapping segments (default: 1000 chars)
-5. **Embedding Generation**: Convert each chunk to 384-dimension vector
-6. **Database Storage**: Store chunks + embeddings in PostgreSQL
+1. **PDF Detection**: Application scans data/ directory for PDF files
+2. **Change Detection**: Check file hashes to identify new/modified files
+3. **Text Extraction**: PyMuPDF extracts raw text from each PDF
+4. **Text Cleaning**: Remove unwanted characters, normalize spacing
+5. **Chunking**: Split text into overlapping segments (default: 1000 chars)
+6. **Embedding Generation**: Convert each chunk to 384-dimension vector
+7. **Database Storage**: Store chunks + embeddings in PostgreSQL
+8. **Cache Update**: Remember processed files to avoid duplicates
 
 #### **Search Flow:**
 ```
@@ -368,7 +395,17 @@ python main.py
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 7. Access the Application
+### 7. Add PDF Files and Start Using
+
+```bash
+# Add your PDF files to the data directory
+cp your_document.pdf data/
+
+# The application will automatically process them on startup
+# Or manually trigger processing via API
+```
+
+### 8. Access the Application
 
 - **API Documentation**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
@@ -376,28 +413,37 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 
 ## 📖 API Usage
 
-### Upload a PDF Document
+### Process PDF Documents
 
+**Automatic Processing:**
+PDF files are automatically processed when placed in the `data/` directory and the application starts.
+
+**Manual Processing:**
 ```bash
-curl -X POST "http://localhost:8000/upload-pdf" \
-  -H "accept: application/json" \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@your_document.pdf"
+# Process all new/modified files in data/ folder
+curl -X POST "http://localhost:8000/process-data-folder"
+
+# Force reprocess all files
+curl -X POST "http://localhost:8000/process-data-folder?force_reprocess=true"
 ```
 
 **Response:**
 ```json
 {
-  "message": "Successfully processed your_document.pdf",
-  "chunks_created": 25,
-  "chunks_stored": 25,
-  "document_id": "doc_your_document_20231105_a1b2c3d4",
-  "metadata": {
-    "filename": "your_document.pdf",
-    "word_count": 5420,
-    "file_size_bytes": 256000
+  "message": "Data folder processing completed",
+  "processing_summary": {
+    "files_processed": 2,
+    "files_skipped": 1,
+    "total_processing_time": 15.3,
+    "processed_documents": ["doc_report_20231105_a1b2c3d4", "doc_manual_20231105_e5f6g7h8"]
   }
 }
+```
+
+### Check Data Folder Status
+
+```bash
+curl -X GET "http://localhost:8000/data-folder-info"
 ```
 
 ### Perform Semantic Search

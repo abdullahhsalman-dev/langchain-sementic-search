@@ -15,7 +15,7 @@ Main Features:
 - Vector similarity search
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -23,10 +23,10 @@ import os
 from dotenv import load_dotenv
 
 # Import our custom modules
-from src.database import get_database_session
 from src.document_processor import DocumentProcessor
 from src.semantic_search import SemanticSearchEngine
 from src.rag_engine import RAGEngine
+from src.data_loader import DataFolderLoader
 
 # Load environment variables from .env file
 load_dotenv()
@@ -70,6 +70,7 @@ class RAGResponse(BaseModel):
 document_processor: DocumentProcessor = None
 search_engine: SemanticSearchEngine = None
 rag_engine: RAGEngine = None
+data_loader: DataFolderLoader = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -80,8 +81,9 @@ async def startup_event():
     - Document processor for PDF handling
     - Semantic search engine with embeddings
     - RAG engine for question answering
+    - Data loader for automatic PDF processing
     """
-    global document_processor, search_engine, rag_engine
+    global document_processor, search_engine, rag_engine, data_loader
     
     try:
         # Initialize document processor
@@ -93,6 +95,22 @@ async def startup_event():
         
         # Initialize RAG engine
         rag_engine = RAGEngine(search_engine)
+        
+        # Initialize data loader for automatic PDF processing
+        data_loader = DataFolderLoader(
+            data_dir="data",
+            search_engine=search_engine,
+            document_processor=document_processor
+        )
+        
+        # Automatically process any PDFs in the data folder
+        print("🔄 Processing PDFs from data/ directory...")
+        processing_result = await data_loader.process_all_files()
+        
+        if processing_result["files_processed"] > 0:
+            print(f"✅ Processed {processing_result['files_processed']} PDF files from data/ directory")
+        else:
+            print("📭 No new PDF files to process")
         
         print("✅ Application startup completed successfully")
         
@@ -111,71 +129,76 @@ async def root():
     return {
         "message": "LangChain Semantic Search Engine API",
         "version": "1.0.0",
+        "note": "Place PDF files in the 'data/' directory for automatic processing",
         "endpoints": {
-            "upload": "/upload-pdf",
             "search": "/search",
             "rag": "/rag",
             "documents": "/documents",
+            "process_data_folder": "/process-data-folder",
+            "data_folder_info": "/data-folder-info",
             "health": "/health"
         },
         "documentation": "/docs"
     }
 
-@app.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...)):
+@app.post("/process-data-folder")
+async def process_data_folder(force_reprocess: bool = False):
     """
-    Upload and process a PDF document for semantic search
+    Process all PDF files in the data/ directory
     
     This endpoint:
-    1. Validates the uploaded file is a PDF
-    2. Processes the PDF content into chunks
-    3. Generates embeddings for each chunk
-    4. Stores chunks and embeddings in PostgreSQL
+    1. Scans the data/ directory for PDF files
+    2. Processes new or modified files (unless force_reprocess=True)
+    3. Generates embeddings and stores in database
+    4. Returns processing summary
     
     Args:
-        file (UploadFile): The PDF file to upload and process
+        force_reprocess: If True, reprocess all files regardless of cache
         
     Returns:
-        dict: Processing results including number of chunks created
+        dict: Processing summary and statistics
         
     Raises:
-        HTTPException: If file is not PDF or processing fails
+        HTTPException: If processing fails
     """
-    # Validate file type
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(
-            status_code=400,
-            detail="Only PDF files are supported"
-        )
-    
     try:
-        # Read file content
-        file_content = await file.read()
-        
-        # Process the PDF document
-        result = await document_processor.process_pdf(
-            file_content=file_content,
-            filename=file.filename
-        )
-        
-        # Store processed chunks in vector database
-        chunks_stored = await search_engine.store_document_chunks(
-            chunks=result["chunks"],
-            metadata=result["metadata"]
-        )
+        processing_result = await data_loader.process_all_files(force_reprocess=force_reprocess)
         
         return {
-            "message": f"Successfully processed {file.filename}",
-            "chunks_created": len(result["chunks"]),
-            "chunks_stored": chunks_stored,
-            "document_id": result["document_id"],
-            "metadata": result["metadata"]
+            "message": "Data folder processing completed",
+            "processing_summary": processing_result,
+            "force_reprocess": force_reprocess
         }
         
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Error processing PDF: {str(e)}"
+            detail=f"Error processing data folder: {str(e)}"
+        )
+
+@app.get("/data-folder-info")
+async def get_data_folder_info():
+    """
+    Get information about the data folder and processed files
+    
+    Returns:
+        dict: Information about processed files and statistics
+    """
+    try:
+        info = data_loader.get_processed_files_info()
+        
+        return {
+            "message": "Data folder information",
+            "data_directory": info["data_directory"],
+            "total_processed_files": len(info["processed_files"]),
+            "processed_files": info["processed_files"],
+            "statistics": info["statistics"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting data folder info: {str(e)}"
         )
 
 @app.post("/search", response_model=List[SearchResult])
@@ -365,7 +388,7 @@ async def not_found_handler(request, exc):
     """Custom 404 error handler"""
     return JSONResponse(
         status_code=404,
-        content={"message": "Endpoint not found", "available_endpoints": ["/docs", "/search", "/rag", "/upload-pdf"]}
+        content={"message": "Endpoint not found", "available_endpoints": ["/docs", "/search", "/rag", "/process-data-folder", "/data-folder-info"]}
     )
 
 @app.exception_handler(500)
