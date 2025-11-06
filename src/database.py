@@ -61,7 +61,7 @@ class Document(Base):
     processed_at = Column(DateTime)
     
     # Additional metadata as JSON
-    metadata = Column(JSON)
+    doc_metadata = Column(JSON)
 
 class DocumentChunk(Base):
     """
@@ -92,7 +92,7 @@ class DocumentChunk(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Additional metadata as JSON
-    metadata = Column(JSON)
+    chunk_metadata = Column(JSON)
 
 class DatabaseManager:
     """
@@ -230,7 +230,7 @@ class DatabaseManager:
                     chunk_size=metadata.get("chunk_size"),
                     chunk_overlap=metadata.get("chunk_overlap"),
                     processed_at=datetime.fromisoformat(metadata.get("processed_at")),
-                    metadata=metadata
+                    doc_metadata=metadata
                 )
                 
                 session.add(document)
@@ -273,7 +273,7 @@ class DatabaseManager:
                         content=chunk_data["content"],
                         chunk_index=chunk_data.get("chunk_index", 0),
                         embedding=chunk_data["embedding"],
-                        metadata=chunk_data.get("metadata", {})
+                        chunk_metadata=chunk_data.get("metadata", {})
                     )
                     
                     session.add(chunk)
@@ -316,7 +316,7 @@ class DatabaseManager:
                     SELECT 
                         id,
                         content,
-                        metadata,
+                        chunk_metadata,
                         (1 - (embedding <=> :query_embedding)) as similarity_score
                     FROM document_chunks
                     WHERE (1 - (embedding <=> :query_embedding)) >= :threshold
@@ -340,7 +340,7 @@ class DatabaseManager:
                         "chunk_id": row.id,
                         "content": row.content,
                         "similarity_score": float(row.similarity_score),
-                        "metadata": row.metadata or {}
+                        "metadata": row.chunk_metadata or {}
                     })
                 
                 return results
@@ -379,7 +379,7 @@ class DatabaseManager:
                         "word_count": row.word_count,
                         "chunk_count": row.chunk_count,
                         "processed_at": row.processed_at.isoformat() if row.processed_at else None,
-                        "metadata": row.metadata or {}
+                        "metadata": row.doc_metadata or {}
                     })
                 
                 return documents
