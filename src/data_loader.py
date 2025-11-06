@@ -183,7 +183,7 @@ class DataFolderLoader:
         
         return files_to_process
     
-    async def process_pdf_file(self, pdf_file: Path) -> Optional[Dict[str, Any]]:
+    def process_pdf_file(self, pdf_file: Path) -> Optional[Dict[str, Any]]:
         """
         Process a single PDF file
         
@@ -204,14 +204,14 @@ class DataFolderLoader:
                 pdf_content = f.read()
             
             # Process the PDF using document processor
-            result = await self.document_processor.process_pdf(
+            result = self.document_processor.process_pdf(
                 file_content=pdf_content,
                 filename=pdf_file.name
             )
             
             # Store document chunks using search engine
             if self.search_engine:
-                chunks_stored = await self.search_engine.store_document_chunks(
+                chunks_stored = self.search_engine.store_document_chunks(
                     chunks=result["chunks"],
                     metadata=result["metadata"]
                 )
@@ -249,7 +249,7 @@ class DataFolderLoader:
             
             return None
     
-    async def process_all_files(self, force_reprocess: bool = False) -> Dict[str, Any]:
+    def process_all_files(self, force_reprocess: bool = False) -> Dict[str, Any]:
         """
         Process all PDF files in the data directory
         
@@ -300,7 +300,7 @@ class DataFolderLoader:
         # Process files one by one (could be made parallel if needed)
         processed_results = []
         for pdf_file in files_to_process:
-            result = await self.process_pdf_file(pdf_file)
+            result = self.process_pdf_file(pdf_file)
             if result:
                 processed_results.append(result)
         
@@ -324,7 +324,7 @@ class DataFolderLoader:
         
         return summary
     
-    async def process_specific_file(self, filename: str) -> Optional[Dict[str, Any]]:
+    def process_specific_file(self, filename: str) -> Optional[Dict[str, Any]]:
         """
         Process a specific file by name
         
@@ -344,7 +344,7 @@ class DataFolderLoader:
             print(f"❌ Not a PDF file: {filename}")
             return None
         
-        return await self.process_pdf_file(file_path)
+        return self.process_pdf_file(file_path)
     
     def get_processed_files_info(self) -> Dict[str, Any]:
         """

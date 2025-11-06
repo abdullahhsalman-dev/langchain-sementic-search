@@ -12,15 +12,13 @@ Uses SQLAlchemy for ORM and pgvector for vector operations.
 """
 
 import os
-import asyncio
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from typing import List, Dict, Any, Optional, Generator
 from datetime import datetime
 import numpy as np
 
 from sqlalchemy import create_engine, Column, String, Text, DateTime, Integer, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.dialects.postgresql import UUID
 from pgvector.sqlalchemy import Vector
 import uuid
@@ -118,23 +116,22 @@ class DatabaseManager:
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable must be set")
         
-        # Create async engine for database operations
+        # Create synchronous engine for database operations
         # echo=True enables SQL logging for debugging (disable in production)
-        self.async_engine = create_async_engine(
-            self.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+        self.engine = create_engine(
+            self.database_url,
             echo=False,  # Set to True for SQL query logging
             pool_size=10,  # Connection pool size
             max_overflow=20  # Maximum overflow connections
         )
         
-        # Create async session factory
-        self.AsyncSessionLocal = async_sessionmaker(
-            bind=self.async_engine,
-            class_=AsyncSession,
+        # Create session factory
+        self.SessionLocal = sessionmaker(
+            bind=self.engine,
             expire_on_commit=False
         )
     
-    async def initialize_database(self):
+    def initialize_database(self):
         """
         Initialize database tables and pgvector extension
         
@@ -146,19 +143,21 @@ class DatabaseManager:
         Should be called once during application startup.
         """
         try:
-            async with self.async_engine.begin() as conn:
+            with self.engine.connect() as conn:
                 # Enable pgvector extension
-                await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+                conn.commit()
                 
                 # Create all tables defined in Base
-                await conn.run_sync(Base.metadata.create_all)
+                Base.metadata.create_all(self.engine)
                 
                 # Create vector index for efficient similarity search
                 # Using HNSW (Hierarchical Navigable Small World) index for fast approximate search
-                await conn.execute(text("""
+                conn.execute(text("""
                     CREATE INDEX IF NOT EXISTS document_chunks_embedding_idx 
                     ON document_chunks USING hnsw (embedding vector_cosine_ops)
                 """))
+                conn.commit()
                 
             print("✅ Database initialized successfully")
             
@@ -166,25 +165,16 @@ class DatabaseManager:
             print(f"❌ Error initializing database: {str(e)}")
             raise e
     
-    async def get_session(self) -> AsyncGenerator[AsyncSession, None]:
+    def get_session(self):
         """
-        Get async database session
+        Get database session as context manager
         
-        Yields:
-            AsyncSession: Database session for operations
-            
-        Example:
-            async with database.get_session() as session:
-                # Perform database operations
-                pass
+        Returns:
+            Session: Database session for operations
         """
-        async with self.AsyncSessionLocal() as session:
-            try:
-                yield session
-            finally:
-                await session.close()
+        return self.SessionLocal()
     
-    async def health_check(self) -> bool:
+    def health_check(self) -> bool:
         """
         Check database connectivity and health
         
@@ -192,16 +182,19 @@ class DatabaseManager:
             bool: True if database is accessible and healthy
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 # Simple query to test connection
-                result = await session.execute(text("SELECT 1"))
+                result = session.execute(text("SELECT 1"))
                 return result.scalar() == 1
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Database health check failed: {str(e)}")
             return False
     
-    async def store_document(self, 
+    def store_document(self, 
                            document_id: str, 
                            metadata: Dict[str, Any]) -> bool:
         """
@@ -218,7 +211,8 @@ class DatabaseManager:
             Exception: If storage fails
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 # Create document record
                 document = Document(
                     id=document_id,
@@ -234,15 +228,17 @@ class DatabaseManager:
                 )
                 
                 session.add(document)
-                await session.commit()
+                session.commit()
                 
                 return True
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Error storing document: {str(e)}")
             raise e
     
-    async def store_chunks(self, 
+    def store_chunks(self, 
                           chunks: List[Dict[str, Any]]) -> int:
         """
         Store document chunks with embeddings in the database
@@ -262,7 +258,8 @@ class DatabaseManager:
             Exception: If storage fails
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 stored_count = 0
                 
                 for chunk_data in chunks:
@@ -279,14 +276,16 @@ class DatabaseManager:
                     session.add(chunk)
                     stored_count += 1
                 
-                await session.commit()
+                session.commit()
                 return stored_count
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Error storing chunks: {str(e)}")
             raise e
     
-    async def similarity_search(self, 
+    def similarity_search(self, 
                               query_embedding: List[float], 
                               top_k: int = 5,
                               similarity_threshold: float = 0.7) -> List[Dict[str, Any]]:
@@ -309,7 +308,8 @@ class DatabaseManager:
             Exception: If search fails
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 # Perform cosine similarity search using pgvector
                 # Order by similarity score descending, limit to top_k
                 query = text("""
@@ -324,7 +324,7 @@ class DatabaseManager:
                     LIMIT :limit
                 """)
                 
-                result = await session.execute(
+                result = session.execute(
                     query,
                     {
                         "query_embedding": str(query_embedding),
@@ -344,12 +344,14 @@ class DatabaseManager:
                     })
                 
                 return results
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Error performing similarity search: {str(e)}")
             raise e
     
-    async def get_all_documents(self) -> List[Dict[str, Any]]:
+    def get_all_documents(self) -> List[Dict[str, Any]]:
         """
         Get all documents and their metadata
         
@@ -357,7 +359,8 @@ class DatabaseManager:
             List of document metadata dictionaries
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 query = text("""
                     SELECT 
                         d.*,
@@ -368,7 +371,7 @@ class DatabaseManager:
                     ORDER BY d.processed_at DESC
                 """)
                 
-                result = await session.execute(query)
+                result = session.execute(query)
                 
                 documents = []
                 for row in result.fetchall():
@@ -383,12 +386,14 @@ class DatabaseManager:
                     })
                 
                 return documents
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Error retrieving documents: {str(e)}")
             raise e
     
-    async def delete_document(self, document_id: str) -> bool:
+    def delete_document(self, document_id: str) -> bool:
         """
         Delete a document and all its chunks
         
@@ -399,23 +404,26 @@ class DatabaseManager:
             bool: True if deleted successfully
         """
         try:
-            async with self.get_session() as session:
+            session = self.get_session()
+            try:
                 # Delete chunks first (foreign key constraint)
-                await session.execute(
+                session.execute(
                     text("DELETE FROM document_chunks WHERE document_id = :doc_id"),
                     {"doc_id": document_id}
                 )
                 
                 # Delete document
-                result = await session.execute(
+                result = session.execute(
                     text("DELETE FROM documents WHERE id = :doc_id"),
                     {"doc_id": document_id}
                 )
                 
-                await session.commit()
+                session.commit()
                 
                 # Return True if any rows were deleted
                 return result.rowcount > 0
+            finally:
+                session.close()
                 
         except Exception as e:
             print(f"Error deleting document: {str(e)}")
@@ -424,21 +432,24 @@ class DatabaseManager:
 # Global database instance
 database_manager: Optional[DatabaseManager] = None
 
-async def get_database_session() -> AsyncGenerator[AsyncSession, None]:
+def get_database_session():
     """
     Dependency function for FastAPI to get database session
     
     Yields:
-        AsyncSession: Database session for request handling
+        Session: Database session for request handling
     """
     global database_manager
     
     if not database_manager:
         database_manager = DatabaseManager()
-        await database_manager.initialize_database()
+        database_manager.initialize_database()
     
-    async with database_manager.get_session() as session:
+    session = database_manager.get_session()
+    try:
         yield session
+    finally:
+        session.close()
 
 # Import text function for raw SQL queries
 from sqlalchemy import text

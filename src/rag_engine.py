@@ -4,38 +4,36 @@ RAG (Retrieval Augmented Generation) Engine
 
 This module implements RAG functionality for question answering using:
 - Semantic search for relevant context retrieval
-- Free language models from Hugging Face for text generation
+- Ollama local language models for text generation
 - Context-aware prompt engineering for accurate responses
 - Confidence scoring and answer validation
 
 RAG combines the power of:
 1. Retrieval: Finding relevant documents via semantic search
-2. Generation: Creating comprehensive answers using retrieved context
+2. Generation: Creating comprehensive answers using Ollama models
 """
 
 import os
-import asyncio
 from typing import List, Dict, Any, Optional
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-import torch
 import time
 
 from .semantic_search import SemanticSearchEngine
+from .ollama_client import OllamaClient
 
 class RAGEngine:
     """
-    RAG engine that combines semantic search with text generation
+    RAG engine that combines semantic search with Ollama text generation
     
     This class provides:
     - Context retrieval from document database
     - Prompt engineering for better responses
-    - Answer generation using free language models
+    - Answer generation using Ollama local models
     - Response quality assessment and confidence scoring
     """
     
     def __init__(self, 
                  search_engine: SemanticSearchEngine,
-                 model_name: str = None,
+                 ollama_client: OllamaClient = None,
                  max_context_length: int = 2048,
                  temperature: float = 0.7):
         """
@@ -43,22 +41,15 @@ class RAGEngine:
         
         Args:
             search_engine: Initialized semantic search engine
-            model_name: Name of the language model to use for generation
+            ollama_client: Ollama client for text generation
             max_context_length: Maximum length of context to include
             temperature: Sampling temperature for text generation (0.0 = deterministic)
         """
         self.search_engine = search_engine
-        
-        # Use model from environment or default to a free, capable model
-        self.model_name = model_name or os.getenv("LLM_MODEL", "microsoft/DialoGPT-medium")
+        self.ollama_client = ollama_client or OllamaClient()
         
         self.max_context_length = max_context_length
         self.temperature = temperature
-        
-        # Model components (initialized lazily)
-        self.tokenizer: Optional[AutoTokenizer] = None
-        self.model: Optional[AutoModelForCausalLM] = None
-        self.generator: Optional[pipeline] = None
         
         # Performance tracking
         self.generation_stats = {
@@ -67,89 +58,35 @@ class RAGEngine:
             "average_context_length": 0.0
         }
         
-        # Check for GPU availability
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"🔧 RAG Engine will use device: {self.device}")
+        print(f"🔧 RAG Engine initialized with Ollama client")
     
-    async def initialize(self):
+    def initialize(self):
         """
-        Initialize the language model and tokenizer
+        Initialize the Ollama client and check model availability
         
-        This method loads the model components for text generation.
-        Models are downloaded on first use.
+        This method verifies that Ollama is running and the model is available.
         """
         try:
-            print(f"🔄 Loading language model: {self.model_name}")
+            print(f"🔄 Checking Ollama connection and model availability...")
             
-            # Load tokenizer
-            self.tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name,
-                padding_side="left"  # Important for batch generation
-            )
+            # Check if Ollama server is healthy
+            if not self.ollama_client.health_check():
+                raise Exception("Ollama server is not running. Please start Ollama first.")
             
-            # Add pad token if not present
-            if self.tokenizer.pad_token is None:
-                self.tokenizer.pad_token = self.tokenizer.eos_token
+            # Check if the default model is available
+            if not self.ollama_client.check_model_available():
+                print(f"🔄 Model {self.ollama_client.model_name} not found. Attempting to pull...")
+                if not self.ollama_client.pull_model(self.ollama_client.model_name):
+                    raise Exception(f"Failed to pull model {self.ollama_client.model_name}")
             
-            # Load model with appropriate settings
-            self.model = AutoModelForCausalLM.from_pretrained(
-                self.model_name,
-                torch_dtype=torch.float16 if self.device == "cuda" else torch.float32,
-                device_map="auto" if self.device == "cuda" else None,
-                low_cpu_mem_usage=True
-            )
-            
-            # Create text generation pipeline
-            self.generator = pipeline(
-                "text-generation",
-                model=self.model,
-                tokenizer=self.tokenizer,
-                device=0 if self.device == "cuda" else -1,
-                do_sample=True,
-                temperature=self.temperature,
-                max_new_tokens=512,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
-            
-            print("✅ Language model loaded successfully")
+            print("✅ Ollama client initialized successfully")
             
         except Exception as e:
-            print(f"❌ Error loading language model: {str(e)}")
-            # Fallback to a simpler approach for text generation
-            print("🔄 Falling back to simple text generation...")
-            await self._initialize_fallback_generator()
+            print(f"❌ Error initializing Ollama client: {str(e)}")
+            raise e
     
-    async def _initialize_fallback_generator(self):
-        """
-        Initialize a fallback text generator for when full models fail to load
-        
-        This provides basic functionality using smaller, more reliable models.
-        """
-        try:
-            # Use a smaller, more reliable model for fallback
-            fallback_model = "gpt2"
-            
-            self.tokenizer = AutoTokenizer.from_pretrained(fallback_model)
-            self.tokenizer.pad_token = self.tokenizer.eos_token
-            
-            self.generator = pipeline(
-                "text-generation",
-                model=fallback_model,
-                tokenizer=self.tokenizer,
-                device=-1,  # Force CPU for reliability
-                max_new_tokens=256,
-                do_sample=True,
-                temperature=0.8,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
-            
-            print("✅ Fallback text generator initialized")
-            
-        except Exception as e:
-            print(f"❌ Error initializing fallback generator: {str(e)}")
-            self.generator = None
     
-    async def generate_answer(self, 
+    def generate_answer(self, 
                             question: str, 
                             top_k: int = 3,
                             max_tokens: int = 512,
@@ -186,7 +123,7 @@ class RAGEngine:
             # Step 1: Retrieve relevant context
             print(f"🔍 Retrieving context for question: {question[:100]}...")
             
-            search_results = await self.search_engine.search(
+            search_results = self.search_engine.search(
                 query=question,
                 top_k=top_k,
                 similarity_threshold=0.6  # Lower threshold for more context
@@ -200,16 +137,21 @@ class RAGEngine:
                     "generation_time": time.time() - start_time
                 }
             
-            # Step 2: Prepare context and prompt
+            # Step 2: Prepare context
             context = self._prepare_context(search_results)
-            prompt = self._construct_prompt(question, context)
             
-            # Step 3: Generate answer
-            if self.generator is None:
-                # Fallback to template-based response if no generator available
+            # Step 3: Generate answer using Ollama
+            try:
+                answer = self.ollama_client.generate_with_context(
+                    question=question,
+                    context=context,
+                    max_tokens=max_tokens,
+                    temperature=self.temperature
+                )
+            except Exception as e:
+                print(f"⚠️  Ollama generation failed: {str(e)}")
+                # Fallback to template-based answer
                 answer = self._generate_template_answer(question, search_results)
-            else:
-                answer = await self._generate_model_answer(prompt, max_tokens)
             
             # Step 4: Calculate confidence score
             confidence_score = self._calculate_confidence_score(search_results, answer)
@@ -264,62 +206,7 @@ class RAGEngine:
         
         return context
     
-    def _construct_prompt(self, question: str, context: str) -> str:
-        """
-        Construct a well-formatted prompt for the language model
-        
-        Args:
-            question: User's question
-            context: Retrieved context text
-            
-        Returns:
-            str: Formatted prompt for text generation
-        """
-        prompt = f"""Context Information:
-{context}
-
-Question: {question}
-
-Based on the context information provided above, please provide a comprehensive and accurate answer to the question. If the context doesn't contain enough information to fully answer the question, please indicate what information is missing.
-
-Answer:"""
-        
-        return prompt
     
-    async def _generate_model_answer(self, prompt: str, max_tokens: int) -> str:
-        """
-        Generate answer using the language model
-        
-        Args:
-            prompt: Formatted prompt with context and question
-            max_tokens: Maximum tokens to generate
-            
-        Returns:
-            str: Generated answer text
-        """
-        try:
-            # Generate response using the pipeline
-            response = self.generator(
-                prompt,
-                max_new_tokens=min(max_tokens, 512),
-                num_return_sequences=1,
-                truncation=True,
-                pad_token_id=self.tokenizer.eos_token_id
-            )
-            
-            # Extract generated text (remove the original prompt)
-            generated_text = response[0]["generated_text"]
-            answer = generated_text[len(prompt):].strip()
-            
-            # Clean up the answer
-            answer = self._clean_generated_answer(answer)
-            
-            return answer
-            
-        except Exception as e:
-            print(f"⚠️  Model generation failed: {str(e)}")
-            # Fallback to template-based answer
-            return "I apologize, but I encountered an issue generating a response. Please try again."
     
     def _generate_template_answer(self, question: str, search_results: List[Dict[str, Any]]) -> str:
         """
@@ -347,32 +234,6 @@ Answer:"""
         
         return answer
     
-    def _clean_generated_answer(self, answer: str) -> str:
-        """
-        Clean and format generated answer text
-        
-        Args:
-            answer: Raw generated answer
-            
-        Returns:
-            str: Cleaned answer text
-        """
-        # Remove common generation artifacts
-        answer = answer.replace("<|endoftext|>", "")
-        answer = answer.replace("[PAD]", "")
-        
-        # Remove excessive whitespace
-        lines = [line.strip() for line in answer.split('\n')]
-        answer = '\n'.join(line for line in lines if line)
-        
-        # Limit answer length if too verbose
-        if len(answer) > 1000:
-            # Find a good breaking point (end of sentence)
-            break_point = answer.rfind('.', 0, 900)
-            if break_point > 500:
-                answer = answer[:break_point + 1]
-        
-        return answer.strip()
     
     def _calculate_confidence_score(self, 
                                   search_results: List[Dict[str, Any]], 
@@ -438,9 +299,10 @@ Answer:"""
             "total_queries": self.generation_stats["total_queries"],
             "average_generation_time_seconds": round(self.generation_stats["average_generation_time"], 3),
             "average_context_length": round(self.generation_stats["average_context_length"], 1),
-            "model_name": self.model_name,
-            "device": self.device,
+            "ollama_model": self.ollama_client.model_name,
+            "ollama_url": self.ollama_client.base_url,
             "max_context_length": self.max_context_length,
             "temperature": self.temperature,
-            "model_loaded": self.generator is not None
+            "ollama_healthy": self.ollama_client.health_check(),
+            "model_available": self.ollama_client.check_model_available()
         }

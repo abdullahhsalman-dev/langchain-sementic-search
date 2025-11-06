@@ -21,13 +21,13 @@ A powerful semantic search engine built with LangChain, FastAPI, and PostgreSQL 
 - **LangChain**: Framework for developing LLM-powered applications
 - **PostgreSQL + pgvector**: Vector database for efficient similarity search
 - **Sentence Transformers**: Free, high-quality text embeddings
-- **Hugging Face Transformers**: Free language models for text generation
+- **Ollama**: Local language models for text generation
 
 ### Key Dependencies
 - `sentence-transformers`: Generates semantic embeddings
 - `pgvector`: PostgreSQL extension for vector operations
 - `pymupdf`: Robust PDF text extraction
-- `transformers`: Language model inference
+- `requests`: HTTP client for Ollama API
 - `psycopg2`: PostgreSQL database connectivity
 
 ## 🏗️ Architecture
@@ -243,11 +243,11 @@ Language Model → Generated Answer → Confidence Score
 - Completely free to use
 - Multiple model options for different needs
 
-**Hugging Face Transformers:**
-- Access to thousands of free language models
-- Easy model switching and experimentation
-- Local inference (no API calls needed)
-- GPU acceleration support
+**Ollama:**
+- Local LLM inference with no API keys required
+- Fast model switching and experimentation
+- Complete privacy and data control
+- Supports popular models like Llama, Mistral, CodeLlama
 
 ### 🎯 **Key Features Breakdown**
 
@@ -294,7 +294,8 @@ Language Model → Generated Answer → Confidence Score
 
 1. **Python 3.8+** installed on your system
 2. **PostgreSQL 12+** with superuser access
-3. **Git** for cloning the repository
+3. **Ollama** installed for local LLM inference
+4. **Git** for cloning the repository
 
 ### 1. Clone the Repository
 
@@ -355,7 +356,38 @@ GRANT ALL PRIVILEGES ON DATABASE semantic_search_db TO your_username;
 \q
 ```
 
-### 4. Configure Environment
+### 4. Set Up Ollama
+
+#### Install Ollama
+
+**Linux/macOS:**
+```bash
+curl -fsSL https://ollama.ai/install.sh | sh
+```
+
+**Windows:**
+Download from [ollama.ai](https://ollama.ai) and run the installer.
+
+#### Download and Start Llama Model
+
+```bash
+# Download the recommended model (Llama 3.1 8B)
+ollama pull llama3.1:8b
+
+# Start Ollama service
+ollama serve
+```
+
+**Verify Ollama is running:**
+```bash
+# Test Ollama health
+curl http://localhost:11434/api/tags
+
+# Test model availability
+ollama list
+```
+
+### 5. Configure Environment
 
 ```bash
 # Copy environment template
@@ -377,17 +409,23 @@ PORT=8000
 # Embedding Model Configuration
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 
-# LLM Configuration
-LLM_MODEL=microsoft/DialoGPT-medium
+# Ollama Configuration
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1:8b
 ```
 
-### 5. Initialize Database
+### 6. Initialize Database
 
 The application will automatically create tables and install the pgvector extension on first run.
 
-### 6. Run the Application
+### 7. Run the Application
+
+**Important:** Make sure Ollama is running before starting the application!
 
 ```bash
+# Make sure Ollama is running (in a separate terminal)
+ollama serve
+
 # Start the FastAPI server
 python main.py
 
@@ -395,7 +433,7 @@ python main.py
 uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 7. Add PDF Files and Start Using
+### 8. Add PDF Files and Start Using
 
 ```bash
 # Add your PDF files to the data directory
@@ -588,19 +626,24 @@ EMBEDDING_MODEL=all-mpnet-base-v2
 EMBEDDING_MODEL=paraphrase-multilingual-MiniLM-L12-v2
 ```
 
-### Language Models for RAG
+### Ollama Models for RAG
 
-Update the `LLM_MODEL` in your `.env` file:
+Update the `OLLAMA_MODEL` in your `.env` file and ensure the model is available:
+
+```bash
+# Download different models
+ollama pull llama3.1:8b          # Default - Best balance
+ollama pull llama3.1:70b         # Larger, more capable
+ollama pull mistral:7b           # Fast alternative
+ollama pull codellama:7b         # Code-focused
+ollama pull mixtral:8x7b         # Mixture of experts
+```
 
 ```env
-# Conversational model (default)
-LLM_MODEL=microsoft/DialoGPT-medium
-
-# General purpose model
-LLM_MODEL=gpt2
-
-# Instruction-following model
-LLM_MODEL=microsoft/DialoGPT-large
+# Configure in .env file
+OLLAMA_MODEL=llama3.1:8b         # Default recommendation
+OLLAMA_MODEL=mistral:7b          # Faster inference
+OLLAMA_MODEL=llama3.1:70b        # Higher quality (requires more RAM)
 ```
 
 ### Document Processing
@@ -759,6 +802,111 @@ For questions, issues, or contributions:
 - [ ] **Advanced Analytics**: Document similarity analysis and topic modeling
 - [ ] **API Keys**: Rate limiting and API key management
 - [ ] **Cloud Deployment**: Docker containers and cloud deployment guides
+
+## 🧠 Advanced Python Concepts Used
+
+This project demonstrates several advanced Python programming concepts and patterns:
+
+### **Object-Oriented Programming & Design Patterns**
+- **Dependency Injection**: DatabaseManager, SemanticSearchEngine, and RAGEngine are injected as dependencies
+- **Factory Pattern**: Session creation and model initialization
+- **Singleton Pattern**: Global database manager instance
+- **Strategy Pattern**: Different embedding models and LLM backends can be swapped
+- **Composition over Inheritance**: Components are composed rather than inherited
+
+### **Advanced Python Features**
+- **Context Managers**: Custom session management with proper resource cleanup
+- **Generators & Iterators**: Database session yielding and file processing
+- **Decorators**: FastAPI route decorators and error handling
+- **Type Hints & Annotations**: Comprehensive typing throughout the codebase
+- **Dataclasses**: DocumentChunk representation with structured data
+- **F-strings & String Formatting**: Advanced string interpolation and formatting
+
+### **Asynchronous Programming**
+- **FastAPI Async Framework**: Modern async web framework usage
+- **Synchronous Adaptation**: Converting async patterns to sync for compatibility
+- **Event-driven Startup**: Application lifecycle management with startup events
+
+### **Error Handling & Resilience**
+- **Exception Hierarchies**: Custom exception handling with specific error types
+- **Try-catch-finally Patterns**: Proper resource cleanup and error propagation
+- **Graceful Degradation**: Fallback mechanisms when models fail to load
+- **Validation & Sanitization**: Input validation using Pydantic models
+
+### **Data Processing & Algorithms**
+- **Vector Mathematics**: Cosine similarity calculations and vector operations
+- **Text Processing**: Advanced regex patterns and string manipulation
+- **Chunking Algorithms**: Recursive text splitting with overlap preservation
+- **Caching Strategies**: LRU-style embedding cache with size limits
+- **Hash-based Deduplication**: SHA-256 file hashing for change detection
+
+### **Database & ORM Patterns**
+- **SQLAlchemy ORM**: Advanced relationship mapping and query building
+- **Connection Pooling**: Database connection management and optimization
+- **Transaction Management**: Proper commit/rollback handling
+- **Raw SQL Integration**: Complex vector similarity queries
+- **Schema Migration**: Automatic table creation and indexing
+
+### **Functional Programming Concepts**
+- **Higher-order Functions**: Functions that take other functions as parameters
+- **List Comprehensions**: Advanced filtering and transformation patterns
+- **Lambda Functions**: Inline function definitions for sorting and filtering
+- **Map/Filter/Reduce Patterns**: Functional data transformation approaches
+
+### **Memory Management & Performance**
+- **Lazy Loading**: Models and embeddings loaded on-demand
+- **Batch Processing**: Efficient bulk operations for embeddings and database inserts
+- **Memory-efficient Streaming**: Processing large files without loading entirely into memory
+- **Resource Cleanup**: Explicit session closure and garbage collection hints
+
+### **Metaprogramming & Introspection**
+- **Dynamic Model Loading**: Runtime model selection and initialization
+- **Attribute Introspection**: Dynamic object property access
+- **Module Import Patterns**: Conditional imports and fallback mechanisms
+- **Configuration-driven Behavior**: Environment-based configuration patterns
+
+### **Concurrency & Threading**
+- **Thread-safe Operations**: Database connection pooling and session management
+- **Atomic Operations**: Database transactions and consistent state management
+- **Resource Locking**: Proper file access and processing coordination
+
+### **Advanced String & Text Processing**
+- **Regular Expressions**: Complex pattern matching for text cleaning
+- **Unicode Handling**: Proper text encoding and normalization
+- **Template Patterns**: Dynamic prompt construction for RAG
+- **Encoding Strategies**: JSON serialization and deserialization patterns
+
+### **Scientific Computing Integration**
+- **NumPy Integration**: Vector operations and array manipulations
+- **Machine Learning Libraries**: Sentence Transformers and Hugging Face integration
+- **Statistical Analysis**: Similarity scoring and confidence calculations
+- **Dimensionality Handling**: High-dimensional vector operations
+
+### **API Design & Web Development**
+- **RESTful API Design**: Proper HTTP methods and status codes
+- **Request/Response Models**: Pydantic model validation and serialization
+- **Middleware Patterns**: Error handling and request processing
+- **Documentation Generation**: Automatic OpenAPI/Swagger documentation
+
+### **Configuration Management**
+- **Environment Variables**: Secure configuration management
+- **Factory Configuration**: Dynamic object creation based on settings
+- **Validation Patterns**: Configuration validation and default handling
+- **Multi-environment Support**: Development/production configuration patterns
+
+### **Testing & Quality Assurance**
+- **Modular Design**: Easily testable component architecture
+- **Dependency Injection**: Facilitates unit testing and mocking
+- **Error Simulation**: Graceful handling of various failure scenarios
+- **Health Checks**: System monitoring and status reporting
+
+### **File System & I/O Operations**
+- **Path Management**: Cross-platform file path handling
+- **Binary File Processing**: PDF reading and processing
+- **Atomic File Operations**: Safe file writing and caching
+- **Directory Traversal**: Recursive file discovery and processing
+
+These concepts demonstrate enterprise-level Python development practices, combining modern frameworks, advanced language features, and solid software engineering principles to create a robust, scalable, and maintainable application.
 
 ---
 

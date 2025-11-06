@@ -27,6 +27,7 @@ from src.document_processor import DocumentProcessor
 from src.semantic_search import SemanticSearchEngine
 from src.rag_engine import RAGEngine
 from src.data_loader import DataFolderLoader
+from src.ollama_client import OllamaClient
 
 # Load environment variables from .env file
 load_dotenv()
@@ -71,6 +72,7 @@ document_processor: DocumentProcessor = None
 search_engine: SemanticSearchEngine = None
 rag_engine: RAGEngine = None
 data_loader: DataFolderLoader = None
+ollama_client: OllamaClient = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -80,10 +82,11 @@ async def startup_event():
     This function runs when the FastAPI application starts up and initializes:
     - Document processor for PDF handling
     - Semantic search engine with embeddings
+    - Ollama client for local LLM inference
     - RAG engine for question answering
     - Data loader for automatic PDF processing
     """
-    global document_processor, search_engine, rag_engine, data_loader
+    global document_processor, search_engine, rag_engine, data_loader, ollama_client
     
     try:
         # Initialize document processor
@@ -91,10 +94,15 @@ async def startup_event():
         
         # Initialize semantic search engine with database connection
         search_engine = SemanticSearchEngine()
-        await search_engine.initialize()
+        search_engine.initialize()
         
-        # Initialize RAG engine
-        rag_engine = RAGEngine(search_engine)
+        # Initialize Ollama client
+        ollama_client = OllamaClient()
+        ollama_client.health_check()
+        
+        # Initialize RAG engine with Ollama client
+        rag_engine = RAGEngine(search_engine, ollama_client)
+        rag_engine.initialize()
         
         # Initialize data loader for automatic PDF processing
         data_loader = DataFolderLoader(
@@ -105,10 +113,14 @@ async def startup_event():
         
         # Automatically process any PDFs in the data folder
         print("🔄 Processing PDFs from data/ directory...")
-        processing_result = await data_loader.process_all_files()
+        processing_result = data_loader.process_all_files()
         
-        if processing_result["files_processed"] > 0:
-            print(f"✅ Processed {processing_result['files_processed']} PDF files from data/ directory")
+        # Extract statistics from result
+        stats = processing_result.get("statistics", {})
+        files_processed = stats.get("files_processed", 0)
+        
+        if files_processed > 0:
+            print(f"✅ Processed {files_processed} PDF files from data/ directory")
         else:
             print("📭 No new PDF files to process")
         
@@ -162,7 +174,7 @@ async def process_data_folder(force_reprocess: bool = False):
         HTTPException: If processing fails
     """
     try:
-        processing_result = await data_loader.process_all_files(force_reprocess=force_reprocess)
+        processing_result = data_loader.process_all_files(force_reprocess=force_reprocess)
         
         return {
             "message": "Data folder processing completed",
@@ -222,7 +234,7 @@ async def semantic_search(query: SearchQuery):
     """
     try:
         # Perform semantic search
-        results = await search_engine.search(
+        results = search_engine.search(
             query=query.query,
             top_k=query.top_k,
             similarity_threshold=query.similarity_threshold
@@ -270,7 +282,7 @@ async def rag_query(query: RAGQuery):
     """
     try:
         # Generate answer using RAG
-        result = await rag_engine.generate_answer(
+        result = rag_engine.generate_answer(
             question=query.question,
             top_k=query.top_k,
             max_tokens=query.max_tokens
@@ -307,7 +319,7 @@ async def list_documents():
         dict: List of documents with their processing statistics
     """
     try:
-        documents = await search_engine.get_all_documents()
+        documents = search_engine.get_all_documents()
         return {
             "total_documents": len(documents),
             "documents": documents
@@ -334,7 +346,7 @@ async def delete_document(document_id: str):
         HTTPException: If document not found or deletion fails
     """
     try:
-        deleted = await search_engine.delete_document(document_id)
+        deleted = search_engine.delete_document(document_id)
         
         if not deleted:
             raise HTTPException(
@@ -364,7 +376,7 @@ async def health_check():
     """
     try:
         # Check database connection
-        db_healthy = await search_engine.health_check()
+        db_healthy = search_engine.health_check()
         
         return {
             "status": "healthy" if db_healthy else "unhealthy",

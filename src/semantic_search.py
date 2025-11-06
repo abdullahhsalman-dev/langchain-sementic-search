@@ -69,7 +69,7 @@ class SemanticSearchEngine:
             "average_search_time": 0.0
         }
     
-    async def initialize(self):
+    def initialize(self):
         """
         Initialize the search engine components
         
@@ -95,7 +95,7 @@ class SemanticSearchEngine:
             print(f"✅ Model loaded. Embedding dimension: {self.embedding_dimension}")
             
             # Initialize database
-            await self.db_manager.initialize_database()
+            self.db_manager.initialize_database()
             
             print("✅ Semantic search engine initialized successfully")
             
@@ -207,7 +207,7 @@ class SemanticSearchEngine:
         except Exception as e:
             raise Exception(f"Error generating batch embeddings: {str(e)}")
     
-    async def store_document_chunks(self, 
+    def store_document_chunks(self, 
                                   chunks: List[DocumentChunk], 
                                   metadata: Dict[str, Any]) -> int:
         """
@@ -241,7 +241,7 @@ class SemanticSearchEngine:
             
             # Store document metadata first
             document_id = chunks[0].metadata["document_id"]
-            await self.db_manager.store_document(document_id, metadata)
+            self.db_manager.store_document(document_id, metadata)
             
             # Prepare chunk data for database storage
             chunk_data = []
@@ -256,7 +256,7 @@ class SemanticSearchEngine:
                 })
             
             # Store chunks in database
-            stored_count = await self.db_manager.store_chunks(chunk_data)
+            stored_count = self.db_manager.store_chunks(chunk_data)
             
             processing_time = time.time() - start_time
             print(f"✅ Stored {stored_count} chunks with embeddings in {processing_time:.2f}s")
@@ -267,7 +267,7 @@ class SemanticSearchEngine:
             print(f"❌ Error storing document chunks: {str(e)}")
             raise e
     
-    async def search(self, 
+    def search(self, 
                     query: str, 
                     top_k: int = 5,
                     similarity_threshold: float = 0.7,
@@ -305,7 +305,7 @@ class SemanticSearchEngine:
             query_embedding = self.generate_embedding(query)
             
             # Perform vector similarity search
-            results = await self.db_manager.similarity_search(
+            results = self.db_manager.similarity_search(
                 query_embedding=query_embedding.tolist(),
                 top_k=top_k,
                 similarity_threshold=similarity_threshold
@@ -330,7 +330,7 @@ class SemanticSearchEngine:
             print(f"❌ Error performing search: {str(e)}")
             raise e
     
-    async def get_all_documents(self) -> List[Dict[str, Any]]:
+    def get_all_documents(self) -> List[Dict[str, Any]]:
         """
         Get metadata for all stored documents
         
@@ -338,11 +338,11 @@ class SemanticSearchEngine:
             List of document metadata dictionaries
         """
         try:
-            return await self.db_manager.get_all_documents()
+            return self.db_manager.get_all_documents()
         except Exception as e:
             raise Exception(f"Error retrieving documents: {str(e)}")
     
-    async def delete_document(self, document_id: str) -> bool:
+    def delete_document(self, document_id: str) -> bool:
         """
         Delete a document and all its associated chunks
         
@@ -353,11 +353,11 @@ class SemanticSearchEngine:
             bool: True if document was deleted successfully
         """
         try:
-            return await self.db_manager.delete_document(document_id)
+            return self.db_manager.delete_document(document_id)
         except Exception as e:
             raise Exception(f"Error deleting document: {str(e)}")
     
-    async def health_check(self) -> bool:
+    def health_check(self) -> bool:
         """
         Check health of search engine components
         
@@ -370,7 +370,7 @@ class SemanticSearchEngine:
                 return False
             
             # Check database connectivity
-            db_healthy = await self.db_manager.health_check()
+            db_healthy = self.db_manager.health_check()
             
             # Test embedding generation
             try:

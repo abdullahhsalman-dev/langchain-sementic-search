@@ -1,0 +1,12 @@
+{
+  "Advanced Medical Testing Lab - Comprehensive Service Catalog & Pricing.pdf": {
+    "error": "'generator' object does not support the context manager protocol",
+    "error_time": "2025-11-06T13:49:34.273116",
+    "file_hash": "1bf0ed9a4d484b7411e7108fce39e426ad58674578fed5a025dd5ff21afe3e4f"
+  },
+  "Advanced Medical Testing Lab - Pricing Guide.pdf": {
+    "error": "'generator' object does not support the context manager protocol",
+    "error_time": "2025-11-06T13:49:34.728092",
+    "file_hash": "6b7c2b2bb909496b5a60da38164f4ce4bc4beb58e648325488d0840706f94cf0"
+  }
+}

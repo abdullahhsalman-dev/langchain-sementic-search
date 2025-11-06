@@ -73,7 +73,7 @@ class DocumentProcessor:
             separators=["\n\n", "\n", " ", ""]  # Try these separators in order
         )
     
-    async def process_pdf(self, 
+    def process_pdf(self, 
                          file_content: bytes, 
                          filename: str) -> Dict[str, Any]:
         """
