@@ -1,12 +1,20 @@
 {
   "Advanced Medical Testing Lab - Comprehensive Service Catalog & Pricing.pdf": {
-    "error": "'generator' object does not support the context manager protocol",
-    "error_time": "2025-11-06T13:49:34.273116",
-    "file_hash": "1bf0ed9a4d484b7411e7108fce39e426ad58674578fed5a025dd5ff21afe3e4f"
+    "file_hash": "1bf0ed9a4d484b7411e7108fce39e426ad58674578fed5a025dd5ff21afe3e4f",
+    "processed_at": "2025-11-06T21:31:03.075989",
+    "document_id": "doc_Advanced_Medical_Testing_Lab_-_Comprehensive_Service_Catalog___Pricing_20251106_213102_1bf0ed9a4d484b74",
+    "chunks_created": 47,
+    "chunks_stored": 47,
+    "processing_time": 1.0656776428222656,
+    "file_size": 384884
   },
   "Advanced Medical Testing Lab - Pricing Guide.pdf": {
-    "error": "'generator' object does not support the context manager protocol",
-    "error_time": "2025-11-06T13:49:34.728092",
-    "file_hash": "6b7c2b2bb909496b5a60da38164f4ce4bc4beb58e648325488d0840706f94cf0"
+    "file_hash": "6b7c2b2bb909496b5a60da38164f4ce4bc4beb58e648325488d0840706f94cf0",
+    "processed_at": "2025-11-06T21:31:03.531340",
+    "document_id": "doc_Advanced_Medical_Testing_Lab_-_Pricing_Guide_20251106_213103_6b7c2b2bb909496b",
+    "chunks_created": 17,
+    "chunks_stored": 17,
+    "processing_time": 0.4543635845184326,
+    "file_size": 1094528
   }
 }

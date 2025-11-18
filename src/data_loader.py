@@ -52,6 +52,7 @@ class DataFolderLoader:
         self.document_processor = document_processor or DocumentProcessor()
         
         # File to track processed files and their hashes
+        # here we are attaching the folder, processed_files.jsom, is directory ma attach ho gay.
         self.processed_files_cache = self.data_dir / ".processed_files.json"
         
         # Load existing processed files cache

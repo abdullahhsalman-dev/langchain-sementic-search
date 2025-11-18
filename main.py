@@ -23,6 +23,7 @@ import os
 from dotenv import load_dotenv
 
 # Import our custom modules
+# What's happening: Importing all the core business logic modules from the src/ directory.
 from src.document_processor import DocumentProcessor
 from src.semantic_search import SemanticSearchEngine
 from src.rag_engine import RAGEngine
@@ -33,6 +34,7 @@ from src.ollama_client import OllamaClient
 load_dotenv()
 
 # Initialize FastAPI application with metadata
+# What's happening: Creating the FastAPI application instance with metadata.
 app = FastAPI(
     title="LangChain Semantic Search Engine",
     description="A semantic search engine for PDF documents using LangChain, PostgreSQL, and free embeddings",
@@ -68,12 +70,21 @@ class RAGResponse(BaseModel):
     confidence_score: float
 
 # Global instances - initialized on startup
+# What's happening: Declaring global variables for core components (initialized later).
 document_processor: DocumentProcessor = None
 search_engine: SemanticSearchEngine = None
 rag_engine: RAGEngine = None
 data_loader: DataFolderLoader = None
 ollama_client: OllamaClient = None
 
+#  What's happening:
+#   - When FastAPI starts, this runs once
+#   - Initializes all core components with proper dependencies
+#   - Automatically processes any PDFs in data/ folder
+#   - Sets up the entire system before handling requests
+
+
+#    # Startup initialization (not HTTP route)
 @app.on_event("startup")
 async def startup_event():
     """
@@ -411,6 +422,8 @@ async def internal_error_handler(request, exc):
         content={"message": "Internal server error", "detail": "Please check the logs for more information"}
     )
 
+
+#   What's happening: When you run python main.py, it starts the uvicorn server.
 if __name__ == "__main__":
     import uvicorn
     
